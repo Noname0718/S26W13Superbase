@@ -1,7 +1,7 @@
 import SwiftUI
 import Supabase
 
-struct Song: Identifiable, Decodable {
+struct Song: Identifiable, Decodable, Hashable {
     let id: UUID
     let title: String
     let artist: String
@@ -11,32 +11,39 @@ struct Song: Identifiable, Decodable {
 
 struct ContentView: View {
     @State private var songs: [Song] = []
-    @State private var userEmail: String = "로그아웃 상태"
+    @State private var isLoggedIn = false
 
     var body: some View {
-        VStack {
-            HStack {
-                Text(userEmail)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Button("임꺽정 로그인") {
-                    Task {
-                        await signInAndFetch()
+        NavigationStack {
+            List {
+                ForEach(songs) { song in
+                    NavigationLink(value: song) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(song.title)
+                                .font(.headline)
+                            Text(song.artist)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
             }
-            .padding(.horizontal)
-
-            List(songs) { song in
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(song.title)
-                        .font(.headline)
-                    Text(song.artist)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+            .navigationDestination(for: Song.self) { song in
+                SongDetailView(song: song)
+            }
+            .toolbar {
+                ToolbarItem {
+                    Button(isLoggedIn ? "로그아웃" : "임꺽정 로그인") {
+                        Task {
+                            if isLoggedIn {
+                                try? await SupabaseManager.client.auth.signOut()
+                                isLoggedIn = false
+                                songs = []
+                            } else {
+                                await signInAndFetch()
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -44,14 +51,14 @@ struct ContentView: View {
 
     func signInAndFetch() async {
         do {
-            let session = try await SupabaseManager.client.auth.signIn(
+            _ = try await SupabaseManager.client.auth.signIn(
                 email: "kjlim@test.com",
                 password: "pass123"
             )
-            userEmail = session.user.email ?? ""
+            isLoggedIn = true
             await fetchSongs()
         } catch {
-            print("로그인 에러: \(error)")
+            print("로그인 실패: \(error)")
         }
     }
 
@@ -64,8 +71,31 @@ struct ContentView: View {
                 .execute()
                 .value
         } catch {
-            print("조회 에러: \(error)")
+            print("조회 실패: \(error)")
         }
+    }
+}
+
+struct SongDetailView: View {
+    let song: Song
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                HStack {
+                    Text(song.artist)
+                        .font(.title2)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text("⭐️ \(song.rating)")
+                        .font(.title2)
+                }
+                Text(song.lyrics)
+            }
+            .padding()
+        }
+        .navigationTitle(song.title)
+        .navigationBarTitleDisplayMode(.large)
     }
 }
 
